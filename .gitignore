@@ -1,0 +1,7 @@
+# local-only files (contain credentials)
+sync-config.json
+sync.js
+run-sync.vbs
+node_modules/
+export.ps1
+*.log
