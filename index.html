@@ -12,14 +12,29 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <span class="brand-mark">BOM</span>
+        <button id="homeBtn" class="brand-mark" title="Home" aria-label="Home">
+          BOM
+        </button>
         <div class="brand-text">
           <h1>Standard BOM Dashboard</h1>
           <p>Search any SKU to view its Bill of Materials</p>
         </div>
       </div>
-      <div class="stat-badges" id="statBadges">
-        <span class="badge">Loading…</span>
+      <div class="topbar-right">
+        <div class="stat-badges" id="statBadges">
+          <span class="badge">Loading…</span>
+        </div>
+        <div class="refresh-controls">
+          <label class="auto-toggle" title="Auto-refresh data periodically">
+            <input type="checkbox" id="autoToggle" checked />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="auto-label">Auto</span>
+          </label>
+          <button id="refreshBtn" class="refresh-btn" title="Refresh data now">
+            <span class="refresh-icon" id="refreshIcon">↻</span>
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
     </div>
   </header>
@@ -30,6 +45,9 @@
       <input id="searchInput" type="text" placeholder="Search by SKU code, item name, barcode, category…" autocomplete="off" spellcheck="false" />
       <button id="clearBtn" class="clear-btn" title="Clear">×</button>
     </div>
+
+    <div class="category-tabs" id="categoryTabs"></div>
+
     <div class="result-count" id="resultCount"></div>
   </section>
 
