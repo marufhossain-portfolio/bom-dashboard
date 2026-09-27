@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Standard BOM Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">BOM</span>
+        <div class="brand-text">
+          <h1>Standard BOM Dashboard</h1>
+          <p>Search any SKU to view its Bill of Materials</p>
+        </div>
+      </div>
+      <div class="stat-badges" id="statBadges">
+        <span class="badge">Loading…</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="search-wrap">
+    <div class="search-box">
+      <svg class="search-icon" viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z"/></svg>
+      <input id="searchInput" type="text" placeholder="Search by SKU code, item name, barcode, category…" autocomplete="off" spellcheck="false" />
+      <button id="clearBtn" class="clear-btn" title="Clear">×</button>
+    </div>
+    <div class="result-count" id="resultCount"></div>
+  </section>
+
+  <main class="layout">
+    <aside class="results-panel">
+      <div class="panel-head">
+        <h2 id="panelTitle">All Items</h2>
+        <span id="panelCount" class="panel-count"></span>
+      </div>
+      <div id="resultsList" class="results-list"></div>
+    </aside>
+
+    <section class="detail-panel">
+      <div id="detailEmpty" class="empty-state">
+        <div class="empty-icon">⌕</div>
+        <h3>Select an item to view details</h3>
+        <p>Type a SKU in the search box above, then click an item to see its full BOM and product information.</p>
+      </div>
+      <div id="detailContent" class="detail-content hidden"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span id="footerInfo">Data snapshot</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
