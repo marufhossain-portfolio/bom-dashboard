@@ -3,6 +3,10 @@
 
   var items = [];
   var generatedAt = "";
+  var activeCategory = "All";
+  var activeCode = null;
+  var autoTimer = null;
+
   var searchInput = document.getElementById("searchInput");
   var clearBtn = document.getElementById("clearBtn");
   var resultsList = document.getElementById("resultsList");
@@ -13,10 +17,39 @@
   var resultCount = document.getElementById("resultCount");
   var statBadges = document.getElementById("statBadges");
   var footerInfo = document.getElementById("footerInfo");
+  var categoryTabs = document.getElementById("categoryTabs");
+  var homeBtn = document.getElementById("homeBtn");
+  var refreshBtn = document.getElementById("refreshBtn");
+  var refreshIcon = document.getElementById("refreshIcon");
+  var autoToggle = document.getElementById("autoToggle");
 
-  var activeCode = null;
+  var CATEGORIES = [
+    { id: "LED", label: "LED" },
+    { id: "HAP", label: "Home Appliances" },
+    { id: "Electrical", label: "Electrical Accessories" },
+    { id: "Molding", label: "Molding" },
+    { id: "Others", label: "Others" }
+  ];
 
-  // Build a searchable string per item (lowercased)
+  function categorize(it) {
+    var cat = (it.category || "").toLowerCase().trim();
+    var name = (it.name || "").toLowerCase().trim();
+
+    var ledCats = ["regular led bulb", "high watt led", "ac/dc bulb", "flood light", "t shape led", "panel led", "bracket tube"];
+    if (ledCats.indexOf(cat) >= 0) return "LED";
+    if (/\bled\b/.test(name)) return "LED";
+
+    var hapCats = ["exhaust fan", "gas stove", "electric cooker", "electric iron", "electric kettle", "rice cooker"];
+    if (hapCats.indexOf(cat) >= 0) return "HAP";
+
+    var elecCats = ["gang switch", "holder and ceiling rose", "regular panel", "mcb", "distribution box", "extension socket", "piano", "down panel", "sdb", "pvc tape", "plugs", "mounting box"];
+    if (elecCats.indexOf(cat) >= 0) return "Electrical";
+
+    if (/(mold|mould)/.test(cat + " " + name)) return "Molding";
+
+    return "Others";
+  }
+
   function searchText(it) {
     return [
       it.code, it.name, it.barcode, it.skuName, it.type, it.category,
@@ -36,55 +69,107 @@
   function fmtNum(n) {
     if (n === null || n === undefined || n === "") return "";
     if (typeof n === "string") {
-      var parsed = parseFloat(n);
-      if (!isNaN(parsed)) n = parsed;
-      else return n;
+      var p = parseFloat(n);
+      if (!isNaN(p)) n = p; else return n;
     }
     if (typeof n === "number") {
       if (Number.isInteger(n)) return n.toLocaleString();
-      return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+      return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
     }
     return n;
   }
 
-  function loadData() {
-    fetch("data/items.json")
+  function categoryCounts() {
+    var counts = { All: items.length };
+    for (var i = 0; i < CATEGORIES.length; i++) counts[CATEGORIES[i].id] = 0;
+    for (var j = 0; j < items.length; j++) {
+      var c = items[j]._cat;
+      if (counts[c] != null) counts[c]++;
+      else counts["Others"]++;
+    }
+    return counts;
+  }
+
+  function renderTabs() {
+    var counts = categoryCounts();
+    var html = '<button class="cat-tab' + (activeCategory === "All" ? " active" : "") + '" data-cat="All">All <span class="cat-count">' + counts.All.toLocaleString() + "</span></button>";
+    for (var i = 0; i < CATEGORIES.length; i++) {
+      var c = CATEGORIES[i];
+      html += '<button class="cat-tab' + (activeCategory === c.id ? " active" : "") + '" data-cat="' + c.id + '">' +
+        escapeHtml(c.label) + ' <span class="cat-count">' + (counts[c.id] || 0).toLocaleString() + "</span></button>";
+    }
+    categoryTabs.innerHTML = html;
+  }
+
+  function loadData(opts) {
+    opts = opts || {};
+    var url = "data/items.json?_=" + Date.now();
+    fetch(url, { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         items = data.items || [];
         generatedAt = data.generatedAt || "";
-        // precompute search text
         for (var i = 0; i < items.length; i++) {
           items[i]._st = searchText(items[i]);
+          items[i]._cat = categorize(items[i]);
         }
         renderStats();
-        footerInfo.textContent = "Data snapshot: " + generatedAt + " · " + items.length + " items";
-        renderList(items);
+        footerInfo.textContent = "Data snapshot: " + generatedAt + " · " + items.length + " items" +
+          (opts.manual ? " · refreshed just now" : "");
+        renderTabs();
+        applyFilters();
       })
       .catch(function (err) {
-        statBadges.innerHTML = '<span class="badge">Error loading data</span>';
-        resultsList.innerHTML = '<div class="list-hint">Failed to load data: ' + escapeHtml(err.message) + "</div>";
+        if (opts.manual) {
+          statBadges.innerHTML = '<span class="badge">Refresh failed</span>';
+        }
+        if (!items.length) {
+          resultsList.innerHTML = '<div class="list-hint">Failed to load data: ' + escapeHtml(err.message) + "</div>";
+        }
       });
   }
 
   function renderStats() {
     var bomRows = 0;
-    for (var i = 0; i < items.length; i++) {
-      bomRows += (items[i].bom || []).length;
-    }
+    for (var i = 0; i < items.length; i++) bomRows += (items[i].bom || []).length;
     statBadges.innerHTML =
       '<span class="badge">Items <b>' + items.length.toLocaleString() + "</b></span>" +
       '<span class="badge">BOM Lines <b>' + bomRows.toLocaleString() + "</b></span>";
   }
 
-  function renderList(list) {
-    panelCount.textContent = list.length.toLocaleString();
-    resultCount.textContent = list.length === items.length
-      ? ""
-      : list.length + " result" + (list.length === 1 ? "" : "s") + " found";
+  function filteredItems() {
+    var q = searchInput.value.trim().toLowerCase();
+    var terms = q.split(/\s+/).filter(Boolean);
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (activeCategory !== "All" && it._cat !== activeCategory) continue;
+      if (terms.length) {
+        var ok = true;
+        for (var t = 0; t < terms.length; t++) {
+          if (it._st.indexOf(terms[t]) === -1) { ok = false; break; }
+        }
+        if (!ok) continue;
+      }
+      out.push(it);
+    }
+    return out;
+  }
 
+  function applyFilters() {
+    var list = filteredItems();
+    var q = searchInput.value.trim();
+    panelTitle.textContent = activeCategory === "All"
+      ? (q ? "Search Results" : "All Items")
+      : (CATEGORIES.filter(function (c) { return c.id === activeCategory; })[0] || {}).label || "Items";
+    panelCount.textContent = list.length.toLocaleString();
+    resultCount.textContent = (q ? "Matching " : "Showing ") + list.length.toLocaleString() + " item" + (list.length === 1 ? "" : "s");
+    renderList(list);
+  }
+
+  function renderList(list) {
     if (list.length === 0) {
-      resultsList.innerHTML = '<div class="list-hint">No matching items. Try a different SKU or keyword.</div>';
+      resultsList.innerHTML = '<div class="list-hint">No matching items. Try a different SKU, keyword or category.</div>';
       return;
     }
     var html = "";
@@ -93,11 +178,10 @@
       var it = list[i];
       html +=
         '<div class="result-item' + (it.code === activeCode ? " active" : "") + '" data-code="' + escapeHtml(it.code) + '">' +
-          '<div class="ri-code">' + escapeHtml(it.code) + "</div>" +
+          '<div class="ri-code"><span class="ri-cat">' + escapeHtml(it._cat) + "</span>" + escapeHtml(it.code) + "</div>" +
           '<div class="ri-name">' + escapeHtml(it.name) + "</div>" +
           '<div class="ri-meta">' +
             (it.category ? "<span>" + escapeHtml(it.category) + "</span>" : "") +
-            (it.type ? "<span>" + escapeHtml(it.type) + "</span>" : "") +
             '<span>' + (it.bom || []).length + " comps</span>" +
           "</div>" +
         "</div>";
@@ -158,7 +242,8 @@
     info += cell("Master ID", it.masterId != null ? it.masterId : "");
 
     var tags = "";
-    tags += it.category ? '<span class="chip primary">' + escapeHtml(it.category) + "</span>" : "";
+    tags += '<span class="chip primary">' + escapeHtml(it._cat) + "</span>";
+    tags += it.category ? '<span class="chip">' + escapeHtml(it.category) + "</span>" : "";
     tags += it.type ? '<span class="chip">' + escapeHtml(it.type) + "</span>" : "";
     tags += '<span class="chip">' + bom.length + " components</span>";
 
@@ -181,59 +266,76 @@
   }
 
   function onSearch() {
-    var q = searchInput.value.trim().toLowerCase();
+    var q = searchInput.value.trim();
     clearBtn.style.display = q ? "block" : "none";
-    if (!q) {
-      panelTitle.textContent = "All Items";
-      activeCode = null;
-      renderList(items);
-      return;
+    applyFilters();
+  }
+
+  function goHome() {
+    searchInput.value = "";
+    clearBtn.style.display = "none";
+    activeCategory = "All";
+    activeCode = null;
+    detailContent.classList.add("hidden");
+    detailEmpty.classList.remove("hidden");
+    renderTabs();
+    applyFilters();
+  }
+
+  function doRefresh(manual) {
+    if (manual) {
+      refreshBtn.classList.add("loading");
+      refreshBtn.disabled = true;
     }
-    panelTitle.textContent = "Search Results";
-    var terms = q.split(/\s+/).filter(Boolean);
-    var out = [];
-    for (var i = 0; i < items.length; i++) {
-      var st = items[i]._st;
-      var match = true;
-      for (var t = 0; t < terms.length; t++) {
-        if (st.indexOf(terms[t]) === -1) { match = false; break; }
-      }
-      if (match) out.push(items[i]);
+    loadData({ manual: manual });
+    if (manual) {
+      setTimeout(function () {
+        refreshBtn.classList.remove("loading");
+        refreshBtn.disabled = false;
+      }, 1200);
     }
-    renderList(out);
+  }
+
+  function setAuto(enabled) {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    if (enabled) {
+      autoTimer = setInterval(function () { doRefresh(false); }, 60000);
+    }
   }
 
   function debounce(fn, ms) {
     var t;
-    return function () {
-      clearTimeout(t);
-      t = setTimeout(fn, ms);
-    };
+    return function () { clearTimeout(t); t = setTimeout(fn, ms); };
   }
 
+  // Event listeners
   resultsList.addEventListener("click", function (e) {
     var el = e.target.closest(".result-item");
     if (!el) return;
     var code = el.getAttribute("data-code");
     var it = null;
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].code === code) { it = items[i]; break; }
-    }
+    for (var i = 0; i < items.length; i++) if (items[i].code === code) { it = items[i]; break; }
     if (!it) return;
     activeCode = code;
     var all = resultsList.querySelectorAll(".result-item");
-    for (var j = 0; j < all.length; j++) {
-      all[j].classList.toggle("active", all[j].getAttribute("data-code") === code);
-    }
+    for (var j = 0; j < all.length; j++) all[j].classList.toggle("active", all[j].getAttribute("data-code") === code);
     renderDetail(it);
   });
 
-  searchInput.addEventListener("input", debounce(onSearch, 150));
-  clearBtn.addEventListener("click", function () {
-    searchInput.value = "";
-    onSearch();
-    searchInput.focus();
+  categoryTabs.addEventListener("click", function (e) {
+    var btn = e.target.closest(".cat-tab");
+    if (!btn) return;
+    activeCategory = btn.getAttribute("data-cat");
+    renderTabs();
+    applyFilters();
   });
 
+  searchInput.addEventListener("input", debounce(onSearch, 150));
+  clearBtn.addEventListener("click", function () { searchInput.value = ""; onSearch(); searchInput.focus(); });
+  homeBtn.addEventListener("click", goHome);
+  refreshBtn.addEventListener("click", function () { doRefresh(true); });
+  autoToggle.addEventListener("change", function () { setAuto(autoToggle.checked); });
+
+  setAuto(autoToggle.checked);
   loadData();
 })();
