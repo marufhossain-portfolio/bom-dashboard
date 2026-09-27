@@ -1,0 +1,47 @@
+name: Update BOM Data
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bom-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install mssql
+        run: npm install mssql
+
+      - name: Export BOM data
+        run: node export.js
+        env:
+          MSSQL_SERVER: ${{ secrets.MSSQL_SERVER }}
+          MSSQL_PORT: ${{ secrets.MSSQL_PORT }}
+          MSSQL_USER: ${{ secrets.MSSQL_USER }}
+          MSSQL_PASSWORD: ${{ secrets.MSSQL_PASSWORD }}
+          MSSQL_DATABASE: ${{ secrets.MSSQL_DATABASE }}
+
+      - name: Commit changes
+        run: |
+          git config user.name "bom-bot"
+          git config user.email "bom-bot@users.noreply.github.com"
+          git add data/items.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update BOM data snapshot"
+            git push
+          fi
